@@ -134,6 +134,38 @@ def create_rent_based_hour_df(df):
     rent_based_hour_df = rent_based_hour_df.drop(columns=['hr'])
     return rent_based_hour_df
 
+def create_rent_based_temp_cluster_df(df):
+    temp_bins = [df['temp_celsius_hour'].min()-1, 10, 20, 30, df['temp_celsius_hour'].max()+1]
+    temp_labels = ['Cold', 'Mild', 'Warm', 'Hot']
+    df['temp_hour_cluster'] = pd.cut(df['temp_celsius_hour'], bins=temp_bins, labels=temp_labels)
+    rent_based_temp_cluster_df = df.groupby(by="temp_hour_cluster").agg({
+        "casual_hour": "mean",
+        "registered_hour": "mean",
+        "cnt_hour": "mean",
+    })
+    return rent_based_temp_cluster_df.reset_index()
+
+def create_rent_based_hum_cluster_df(df):
+    hum_bins = [df['hum_hour'].min()-1, 40, 70, df['hum_hour'].max()+1]
+    hum_labels = ['Low Humidity', 'Moderate Humidity', 'High Humidity']
+    df['hum_hour_cluster'] = pd.cut(df['hum_hour'], bins=hum_bins, labels=hum_labels)
+    rent_based_hum_cluster_df = df.groupby(by="hum_hour_cluster").agg({
+        "casual_hour": "mean",
+        "registered_hour": "mean",
+        "cnt_hour": "mean",
+    })
+    return rent_based_hum_cluster_df.reset_index()
+
+def create_rent_based_windspeed_cluster_df(df):
+    windspeed_bins = [df['windspeed_hour'].min()-1, 1, 10, 25, df['windspeed_hour'].max()+1]
+    windspeed_labels = ['No/Very Low Wind', 'Light Wind', 'Moderate Wind', 'Strong Wind']
+    df['windspeed_hour_cluster'] = pd.cut(df['windspeed_hour'], bins=windspeed_bins, labels=windspeed_labels)
+    rent_based_windspeed_cluster_df = df.groupby(by="windspeed_hour_cluster").agg({
+        "casual_hour": "mean",
+        "registered_hour": "mean",
+        "cnt_hour": "mean",
+    })
+    return rent_based_windspeed_cluster_df.reset_index()
 
 main_data_df = pd.read_csv("dashboard/main_data.csv")
 
@@ -166,160 +198,177 @@ rent_based_month_year_df = create_rent_based_month_year_df(day_based_df)
 rent_based_weekday_df = create_rent_based_weekday_df(day_based_df)
 rent_based_workingday_df = create_rent_based_workingday_df(day_based_df)
 rent_based_hour_df = create_rent_based_hour_df(main_df)
+rent_based_temp_cluster_df = create_rent_based_temp_cluster_df(main_df)
+rent_based_hum_cluster_df = create_rent_based_hum_cluster_df(main_df)
+rent_based_windspeed_cluster_df = create_rent_based_windspeed_cluster_df(main_df)
 
 # visualisasi data
 st.header('Proyek Akhir Analisis Data: Bike Sharing Dataset')
 
 # Pertanyaan 1: Bagaimana pengaruh cuaca terhadap jumlah peminjaman sepeda?
+st.subheader("Pertanyaan 1: Bagaimana pengaruh cuaca terhadap jumlah peminjaman sepeda?")
 st.subheader("Jumlah peminjaman sepeda yang dikelompokan berdasarkan tipe cuaca")
 bar_width = 0.25
 
 x_labels = rent_based_weather_df["weather_description"].values
 x_labels = [textwrap.fill(label, 25) for label in x_labels]
+r = np.arange(len(rent_based_weather_df))
 
-r1 = np.arange(len(rent_based_weather_df))
-r2 = [x + bar_width for x in r1]
-r3 = [x + bar_width for x in r2]
+bar_configs = [
+    {"data": rent_based_weather_df["casual_hour"], "color": "skyblue", "label": rename_bike_rent[0]},
+    {"data": rent_based_weather_df["registered_hour"], "color": "orange", "label": rename_bike_rent[1]},
+    {"data": rent_based_weather_df["cnt_hour"], "color": "green", "label": rename_bike_rent[2]}
+]
 
 # **Fix: Assign figure to 'fig'**
 fig, ax = plt.subplots(figsize=(10, 6))
 
-ax.bar(
-    r1,
-    rent_based_weather_df["casual_hour"],
-    color="skyblue",
-    width=bar_width,
-    edgecolor="grey",
-    label="Casual",
-)
-ax.bar(
-    r2,
-    rent_based_weather_df["registered_hour"],
-    color="orange",
-    width=bar_width,
-    edgecolor="grey",
-    label="Registered",
-)
-ax.bar(
-    r3,
-    rent_based_weather_df["cnt_hour"],
-    color="green",
-    width=bar_width,
-    edgecolor="grey",
-    label="All Types",
-)
+bars = []
+for i, config in enumerate(bar_configs):
+    bars.append(ax.bar(
+        r + i * bar_width,  # Position each bar group
+        config["data"],
+        color=config["color"],
+        width=bar_width,
+        edgecolor="grey",
+        label=config["label"]
+    ))
+
+# Add labels to all bars in one loop
+for bar_group in bars:
+    for bar in bar_group:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 5,  # Adjust vertical offset
+            f"{height:.0f}",  # Integer format
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
 
 ax.ticklabel_format(style="plain")
 ax.set_xlabel("Weather Situation")
 ax.set_ylabel("Total Count")
 ax.set_title("Bike Sharing by Weather Situation")
-ax.set_xticks(r1 + bar_width)
+ax.set_xticks(r + bar_width)
 ax.set_xticklabels(x_labels, ha="center", fontsize=8)
 ax.legend()
 fig.tight_layout()
-
 st.pyplot(fig)
 
 st.subheader('Jumlah peminjaman sepeda yang dikelompokan berdasarkan tipe cuaca untuk seluruh tipe peminjaman berdasarkan bulan dan tahun')
+plot_configs = [
+    {"y_col": "cnt_hour", "title": "All Types Bike Sharing"},
+    {"y_col": "casual_hour", "title": "Casual Type Bike Sharing"},
+    {"y_col": "registered_hour", "title": "Registered Type Bike Sharing"}
+]
+
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30, 6))
 
-sns.lineplot(x="month_year", y="cnt_hour", hue="weather_description", data=weather_cnt_month_year_df, ax=ax[0])
-ax[0].set_ylabel("Total Count")
-ax[0].set_xlabel("Year-Month")
-ax[0].set_title("All Types Bike Sharing", loc="center", fontsize=15)
-ax[0].tick_params(axis='y', labelsize=14)
-
-sns.lineplot(x="month_year", y="casual_hour", hue="weather_description", data=weather_cnt_month_year_df, ax=ax[1])
-ax[1].set_ylabel("Total Count")
-ax[1].set_xlabel("Year-Month")
-ax[1].set_title("Casual Type Bike Sharing", loc="center", fontsize=15)
-ax[1].tick_params(axis='y', labelsize=14)
-
-sns.lineplot(x="month_year", y="registered_hour", hue="weather_description", data=weather_cnt_month_year_df, ax=ax[2])
-ax[2].set_ylabel("Total Count")
-ax[2].set_xlabel("Year-Month")
-ax[2].set_title("Registered Type Bike Sharing", loc="center", fontsize=15)
-ax[2].tick_params(axis='y', labelsize=14)
+# Loop through each subplot configuration
+for i, config in enumerate(plot_configs):
+    sns.lineplot(
+        x="month_year", 
+        y=config["y_col"], 
+        hue="weather_description", 
+        data=weather_cnt_month_year_df, 
+        ax=ax[i]
+    )
+    ax[i].set_ylabel("Total Count", fontsize=14)
+    ax[i].set_xlabel("Year-Month", fontsize=14)
+    ax[i].set_title(config["title"], loc="center", fontsize=15)
+    ax[i].tick_params(axis='both', labelsize=14)
+    ax[i].legend(title="Weather Description", fontsize=12)
 
 plt.suptitle("Bike Sharing Trend by Weather Situation Based on Month", fontsize=20)
 st.pyplot(fig)
 
 st.subheader('Jumlah peminjaman sepeda yang dikelompokan berdasarkan tipe cuaca untuk seluruh tipe peminjaman berdasarkan musim dan tahun')
+plot_configs = [
+    {'y_col': 'cnt_hour', 'title': 'All Types Bike Sharing'},
+    {'y_col': 'casual_hour', 'title': 'Casual Type Bike Sharing'},
+    {'y_col': 'registered_hour', 'title': 'Registered Type Bike Sharing'}
+]
+
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30, 6))
 
-sns.lineplot(x="season_year", y="cnt_hour", hue="weather_description", data=weather_cnt_season_year_df, ax=ax[0])
-ax[0].set_ylabel("Total Count")
-ax[0].set_xlabel("Year-Season")
-ax[0].set_title("All Types Bike Sharing", loc="center", fontsize=15)
-ax[0].tick_params(axis='y', labelsize=14)
+# Loop through each subplot configuration
+for i, config in enumerate(plot_configs):
+    sns.lineplot(
+        x='season_year',
+        y=config['y_col'],
+        hue='weather_description',
+        data=weather_cnt_season_year_df,
+        ax=ax[i]
+    )
+    ax[i].set_ylabel('Total Count', fontsize=14)
+    ax[i].set_xlabel('Year-Season', fontsize=14)
+    ax[i].set_title(config['title'], loc='center', fontsize=15)
+    
+    # Rotate x-axis labels 45 degrees
+    ax[i].tick_params(axis='x', labelsize=14, rotation=45)
+    ax[i].tick_params(axis='y', labelsize=14)
 
-sns.lineplot(x="season_year", y="casual_hour", hue="weather_description", data=weather_cnt_season_year_df, ax=ax[1])
-ax[1].set_ylabel("Total Count")
-ax[1].set_xlabel("Year-Season")
-ax[1].set_title("Casual Type Bike Sharing", loc="center", fontsize=15)
-ax[1].tick_params(axis='y', labelsize=14)
-
-sns.lineplot(x="season_year", y="registered_hour", hue="weather_description", data=weather_cnt_season_year_df, ax=ax[2])
-ax[2].set_ylabel("Total Count")
-ax[2].set_xlabel("Year-Season")
-ax[2].set_title("Registered Type Bike Sharing", loc="center", fontsize=15)
-ax[2].tick_params(axis='y', labelsize=14)
+    ax[i].legend(title='Weather Description', fontsize=12)
 
 plt.suptitle("Bike Sharing Trend by Weather Situation Based on Season", fontsize=20)
 st.pyplot(fig)
 
 # Pertanyaan 2: Kapan peminjaman paling banyak dan paling sedikit dilakukan? (Berdasarkan tahun, musim, bulan, hari, jam)
+st.subheader("Pertanyaan 2: Kapan peminjaman paling banyak dan paling sedikit dilakukan? (Berdasarkan tahun, musim, bulan, hari, jam)")
 st.subheader("Berdasarkan tahun")
 bar_width = 0.25
 
 x_labels = rent_based_year_df["year"].values
+r = np.arange(len(rent_based_year_df))
 
-r1 = np.arange(len(rent_based_year_df))
-r2 = [x + bar_width for x in r1]
-r3 = [x + bar_width for x in r2]
+bar_configs = [
+    {"data": rent_based_year_df["casual_day"], "color": "skyblue", "label": rename_bike_rent[0]},
+    {"data": rent_based_year_df["registered_day"], "color": "orange", "label": rename_bike_rent[1]},
+    {"data": rent_based_year_df["cnt_day"], "color": "green", "label": rename_bike_rent[2]}
+]
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-ax.bar(
-    r1,
-    rent_based_year_df["casual_day"],
-    color="skyblue",
-    width=bar_width,
-    edgecolor="grey",
-    label=rename_bike_rent[0],
-)
-ax.bar(
-    r2,
-    rent_based_year_df["registered_day"],
-    color="orange",
-    width=bar_width,
-    edgecolor="grey",
-    label=rename_bike_rent[1],
-)
-ax.bar(
-    r3,
-    rent_based_year_df["cnt_day"],
-    color="green",
-    width=bar_width,
-    edgecolor="grey",
-    label=rename_bike_rent[2],
-)
+bars = []
+for i, config in enumerate(bar_configs):
+    bars.append(ax.bar(
+        r + i * bar_width,  # Position each bar group
+        config["data"],
+        color=config["color"],
+        width=bar_width,
+        edgecolor="grey",
+        label=config["label"]
+    ))
+
+# Add labels to all bars in one loop
+for bar_group in bars:
+    for bar in bar_group:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 5,  # Adjust vertical offset
+            f"{height:.0f}",  # Integer format
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
 
 ax.ticklabel_format(style="plain")
 ax.set_xlabel("Year")
 ax.set_ylabel("Total Count")
 ax.set_title("Bike Sharing Based on Year")
-ax.set_xticks(r1 + bar_width)
+ax.set_xticks(r + bar_width)
 ax.set_xticklabels(x_labels, ha="center", fontsize=8)
 ax.legend()
 fig.tight_layout()
-
 st.pyplot(fig)
 
 st.subheader('Berdasarkan musim pada seluruh tahun')
 fig, ax = plt.subplots(nrows=3, ncols=2, figsize=(24, 18))
 
-colors = ["#DEC4FC", "#C0F2EA", "#C0F2EA", "#C0F2EA", "#C0F2EA"]
+colors = ["#f95d6a", "#b8b8b8", "#b8b8b8", "#b8b8b8", "#b8b8b8"]
 ax = ax.flatten()
 
 for i in range(0, len(column_bike_rent)):
@@ -344,7 +393,7 @@ st.pyplot(fig)
 st.subheader('Berdasarkan bulan pada seluruh tahun')
 fig, ax = plt.subplots(nrows=3, ncols=2, figsize=(24, 18))
 
-colors = ["#DEC4FC", "#C0F2EA", "#C0F2EA", "#C0F2EA", "#C0F2EA"]
+colors = ["#f95d6a", "#b8b8b8", "#b8b8b8", "#b8b8b8", "#b8b8b8"]
 ax = ax.flatten()
 
 for i in range(0, len(column_bike_rent)):
@@ -369,7 +418,7 @@ st.pyplot(fig)
 st.subheader('Berdasarkan jenis hari')
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30, 6)) # Changed ncols to 3
 
-colors = ["#DEC4FC", "#C0F2EA", "#C0F2EA", "#C0F2EA", "#C0F2EA", "#C0F2EA", "#C0F2EA"]
+colors = ["#f95d6a", "#b8b8b8", "#b8b8b8", "#b8b8b8", "#b8b8b8", "#b8b8b8", "#b8b8b8"]
 
 ax = ax.flatten()
 
@@ -387,53 +436,54 @@ st.subheader("Berdasarkan hari kerja dan libur")
 bar_width = 0.25
 
 x_labels = rent_based_workingday_df["workingday_description"].values
+r = np.arange(len(rent_based_workingday_df))
 
-r1 = np.arange(len(rent_based_workingday_df))
-r2 = [x + bar_width for x in r1]
-r3 = [x + bar_width for x in r2]
+bar_configs = [
+    {"data": rent_based_workingday_df["casual_day"], "color": "skyblue", "label": rename_bike_rent[0]},
+    {"data": rent_based_workingday_df["registered_day"], "color": "orange", "label": rename_bike_rent[1]},
+    {"data": rent_based_workingday_df["cnt_day"], "color": "green", "label": rename_bike_rent[2]}
+]
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-ax.bar(
-    r1,
-    rent_based_workingday_df["casual_day"],
-    color="skyblue",
-    width=bar_width,
-    edgecolor="grey",
-    label=rename_bike_rent[0],
-)
-ax.bar(
-    r2,
-    rent_based_workingday_df["registered_day"],
-    color="orange",
-    width=bar_width,
-    edgecolor="grey",
-    label=rename_bike_rent[1],
-)
-ax.bar(
-    r3,
-    rent_based_workingday_df["cnt_day"],
-    color="green",
-    width=bar_width,
-    edgecolor="grey",
-    label=rename_bike_rent[2],
-)
+bars = []
+for i, config in enumerate(bar_configs):
+    bars.append(ax.bar(
+        r + i * bar_width,  # Position each bar group
+        config["data"],
+        color=config["color"],
+        width=bar_width,
+        edgecolor="grey",
+        label=config["label"]
+    ))
+
+# Add labels to all bars in one loop
+for bar_group in bars:
+    for bar in bar_group:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 5,  # Adjust vertical offset
+            f"{height:.0f}",  # Integer format
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
 
 ax.ticklabel_format(style="plain")
 ax.set_xlabel("Day Type")
 ax.set_ylabel("Average Daily Rentals")
 ax.set_title("Bike Sharing Based on Day Type")
-ax.set_xticks(r1 + bar_width)
+ax.set_xticks(r + bar_width)
 ax.set_xticklabels(x_labels, ha="center", fontsize=8)
 ax.legend()
 fig.tight_layout()
-
 st.pyplot(fig)
 
 st.subheader('Berdasarkan jam')
 fig, ax = plt.subplots(nrows=3, ncols=2, figsize=(24, 18))
 
-colors = ["#DEC4FC", "#C0F2EA", "#C0F2EA", "#C0F2EA", "#C0F2EA"]
+colors = ["#f95d6a", "#b8b8b8", "#b8b8b8", "#b8b8b8", "#b8b8b8"]
 ax = ax.flatten()
 
 for i in range(0, len(column_bike_rent_hour)):
@@ -453,6 +503,152 @@ for i in range(0, len(column_bike_rent_hour)):
     ax[i*2+1].tick_params(axis='y', labelsize=14)
 
 plt.suptitle("Best and Worst Performing Bike Sharing Based on Hour", fontsize=20)
+st.pyplot(fig)
+
+# Pertanyaan 3: Bagaimana pengaruh temperatur, kelembapan, dan kecepatan angin terhadap banyaknya peminjaman?
+st.subheader("Pertanyaan 3: Bagaimana pengaruh temperatur, kelembapan, dan kecepatan angin terhadap banyaknya peminjaman?")
+st.subheader("Berdasarkan cluster suhu")
+bar_width = 0.25
+
+x_labels = rent_based_temp_cluster_df["temp_hour_cluster"].values
+r = np.arange(len(rent_based_temp_cluster_df))
+
+bar_configs = [
+    {"data": rent_based_temp_cluster_df["casual_hour"], "color": "skyblue", "label": rename_bike_rent[0]},
+    {"data": rent_based_temp_cluster_df["registered_hour"], "color": "orange", "label": rename_bike_rent[1]},
+    {"data": rent_based_temp_cluster_df["cnt_hour"], "color": "green", "label": rename_bike_rent[2]}
+]
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+bars = []
+for i, config in enumerate(bar_configs):
+    bars.append(ax.bar(
+        r + i * bar_width,  # Position each bar group
+        config["data"],
+        color=config["color"],
+        width=bar_width,
+        edgecolor="grey",
+        label=config["label"]
+    ))
+
+# Add labels to all bars in one loop
+for bar_group in bars:
+    for bar in bar_group:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 5,  # Adjust vertical offset
+            f"{height:.0f}",  # Integer format
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+ax.ticklabel_format(style="plain")
+ax.set_xlabel("Temperature Cluster Type")
+ax.set_ylabel("Average Hourly Rentals")
+ax.set_title("Bike Rentals by Temperature Cluster")
+ax.set_xticks(r + bar_width)
+ax.set_xticklabels(x_labels, ha="center", fontsize=8)
+ax.legend()
+fig.tight_layout()
+st.pyplot(fig)
+
+st.subheader("Berdasarkan cluster kelembapan")
+bar_width = 0.25
+
+x_labels = rent_based_hum_cluster_df["hum_hour_cluster"].values
+r = np.arange(len(rent_based_hum_cluster_df))
+
+bar_configs = [
+    {"data": rent_based_hum_cluster_df["casual_hour"], "color": "skyblue", "label": rename_bike_rent[0]},
+    {"data": rent_based_hum_cluster_df["registered_hour"], "color": "orange", "label": rename_bike_rent[1]},
+    {"data": rent_based_hum_cluster_df["cnt_hour"], "color": "green", "label": rename_bike_rent[2]}
+]
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+bars = []
+for i, config in enumerate(bar_configs):
+    bars.append(ax.bar(
+        r + i * bar_width,  # Position each bar group
+        config["data"],
+        color=config["color"],
+        width=bar_width,
+        edgecolor="grey",
+        label=config["label"]
+    ))
+
+# Add labels to all bars in one loop
+for bar_group in bars:
+    for bar in bar_group:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 5,  # Adjust vertical offset
+            f"{height:.0f}",  # Integer format
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+ax.ticklabel_format(style="plain")
+ax.set_xlabel("Humidity Cluster Type")
+ax.set_ylabel("Average Hourly Rentals")
+ax.set_title("Bike Rentals by Humidity Cluster")
+ax.set_xticks(r + bar_width)
+ax.set_xticklabels(x_labels, ha="center", fontsize=8)
+ax.legend()
+fig.tight_layout()
+st.pyplot(fig)
+
+st.subheader("Berdasarkan cluster kecepatan angin")
+bar_width = 0.25
+
+x_labels = rent_based_windspeed_cluster_df["windspeed_hour_cluster"].values
+r = np.arange(len(rent_based_windspeed_cluster_df))
+
+bar_configs = [
+    {"data": rent_based_windspeed_cluster_df["casual_hour"], "color": "skyblue", "label": rename_bike_rent[0]},
+    {"data": rent_based_windspeed_cluster_df["registered_hour"], "color": "orange", "label": rename_bike_rent[1]},
+    {"data": rent_based_windspeed_cluster_df["cnt_hour"], "color": "green", "label": rename_bike_rent[2]}
+]
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+bars = []
+for i, config in enumerate(bar_configs):
+    bars.append(ax.bar(
+        r + i * bar_width,  # Position each bar group
+        config["data"],
+        color=config["color"],
+        width=bar_width,
+        edgecolor="grey",
+        label=config["label"]
+    ))
+
+# Add labels to all bars in one loop
+for bar_group in bars:
+    for bar in bar_group:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 5,  # Adjust vertical offset
+            f"{height:.0f}",  # Integer format
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+ax.ticklabel_format(style="plain")
+ax.set_xlabel("Windspeed Cluster Type")
+ax.set_ylabel("Average Hourly Rentals")
+ax.set_title("Bike Rentals by Windspeed Cluster")
+ax.set_xticks(r + bar_width)
+ax.set_xticklabels(x_labels, ha="center", fontsize=8)
+ax.legend()
+fig.tight_layout()
 st.pyplot(fig)
 
 st.caption('By: Khansa Mahira 2025')
